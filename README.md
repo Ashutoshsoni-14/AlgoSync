@@ -1,5 +1,7 @@
 # AlgoSync ⚡
 
+Live Demo URL : https://algo-sync-beta.vercel.app/
+
 AlgoSync is a full-stack **competitive and collaborative coding platform** built for developers, students, and placement preparation. It combines **real-time coding battles** with **live collaborative problem-solving** to create an interactive DSA learning ecosystem.
 
 ## 🚀 Features
