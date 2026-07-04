@@ -297,7 +297,7 @@ function Room() {
       status: "Coding..."
     });
 
-    if (roomInfo?.roomType === "collab") {
+    if (roomInfo?.roomType === "collab" && !battleStarted) {
       socket.emit("code-change", {
         roomId,
         code: value,
