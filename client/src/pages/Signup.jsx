@@ -238,7 +238,7 @@ function Signup() {
                     {/* Footer redirect */}
                     <div className="mt-8 text-center text-xs text-zinc-500 font-medium">
                         Already have an account?{" "}
-                        <Link to="/" className="text-indigo-400 hover:text-indigo-300 font-bold hover:underline transition-colors ml-1">
+                        <Link to="/login" className="text-indigo-400 hover:text-indigo-300 font-bold hover:underline transition-colors ml-1">
                             Sign In
                         </Link>
                     </div>
