@@ -10,18 +10,71 @@ import {
   Swords, Play, CheckCircle2, ArrowLeft, Copy, Check, Timer,
   Terminal, AlertCircle, XCircle, ChevronRight, Eye, Users,
   Code, Flame, Sparkles, Award, RotateCcw, Send, MessageSquare, ShieldAlert,
-  Info
+  Info, Sparkle, LayoutGrid, ChevronLeft
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+// Confetti Burst Effect
+function ConfettiBurst() {
+  const elements = Array.from({ length: 45 });
+  const colors = ["#f59e0b", "#ec4899", "#6366f1", "#10b981", "#3b82f6", "#ef4444"];
+  return (
+    <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
+      {elements.map((_, idx) => {
+        const bg = colors[Math.floor(Math.random() * colors.length)];
+        const left = Math.random() * 100;
+        const delay = Math.random() * 2.5;
+        const duration = 2.5 + Math.random() * 2.5;
+        return (
+          <div
+            key={idx}
+            className="confetti-piece"
+            style={{
+              left: `${left}vw`,
+              backgroundColor: bg,
+              animationDelay: `${delay}s`,
+              animationDuration: `${duration}s`,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
+// Circular progress countdown timer
+function CircularTimerHUD({ seconds, isActive, max = 300 }) {
+  const r = 20;
+  const circumference = 2 * Math.PI * r;
+  const fraction = isActive ? Math.max(0, seconds / max) : 0;
+  const offset = circumference - fraction * circumference;
+
+  let stroke = "stroke-emerald-500";
+  if (seconds < 60) stroke = "stroke-rose-500 animate-pulse";
+  else if (seconds < 180) stroke = "stroke-amber-500";
+
+  return (
+    <div className="relative flex items-center justify-center">
+      <svg width="48" height="48" className="transform -rotate-90">
+        <circle cx="24" cy="24" r={r} fill="none" stroke="rgba(255,255,255,0.02)" strokeWidth="3" />
+        {isActive && (
+          <circle cx="24" cy="24" r={r} fill="none" strokeWidth="3"
+            strokeLinecap="round" className={`transition-all duration-1000 ${stroke}`}
+            strokeDasharray={circumference} strokeDashoffset={offset} />
+        )}
+      </svg>
+      <div className={`absolute inset-0 flex items-center justify-center font-mono text-[11px] font-black ${seconds < 60 ? "text-rose-500 animate-ping" : seconds < 180 ? "text-amber-500" : "text-emerald-400"}`}>
+        {isActive ? `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, "0")}` : "--:--"}
+      </div>
+    </div>
+  );
+}
 
 function Room() {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Role detection: check if joined as spectator
   const isSpectator = new URLSearchParams(location.search).get("spectate") === "true";
 
   // Core Editor states
@@ -67,6 +120,10 @@ function Room() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nextRoundCountdown, setNextRoundCountdown] = useState(0);
 
+  // Panel collapse toggles
+  const [col1Collapsed, setCol1Collapsed] = useState(false);
+  const [col3Collapsed, setCol3Collapsed] = useState(false);
+
   // Retrieve current user
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user"));
@@ -82,7 +139,6 @@ function Room() {
       setRoomInfo(data);
       setPlayers(data.users || []);
 
-      // If it is an active battle room, load the active battle details
       if (data.roomType === "battle" && data.isBattleActive) {
         try {
           const battle = await getActiveBattle(roomId);
@@ -91,7 +147,6 @@ function Room() {
             setProblem(battle.problem);
             setBattleStarted(true);
 
-            // Sync remaining time
             const elapsed = Math.floor((Date.now() - new Date(battle.startTime).getTime()) / 1000);
             const remaining = Math.max(0, 300 - elapsed);
             setTimer(remaining);
@@ -130,7 +185,6 @@ function Room() {
       }
       setFilteredProblems(filtered);
 
-      // Use the synchronized problem from the room details, or fallback to first filtered match
       if (!problem) {
         if (roomInfo.currentProblem) {
           setProblem(roomInfo.currentProblem);
@@ -575,13 +629,6 @@ function Room() {
     setTimeout(() => setCopiedRoomId(false), 2000);
   };
 
-  const copyInputToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    setCopiedInput(true);
-    showToast("Sample input copied!");
-    setTimeout(() => setCopiedInput(false), 2000);
-  };
-
   const formatTimer = (secs) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -595,8 +642,13 @@ function Room() {
     return "text-rose-400 bg-rose-500/10 border-rose-500/20";
   };
 
+  const p1 = players[0] || { name: "Player 1", rating: 1200 };
+  const p2 = players[1] || { name: "Player 2", rating: 1200 };
+
   return (
-    <div className="h-screen bg-[#070709] text-zinc-100 flex flex-col overflow-hidden font-sans">
+    <div className="h-screen bg-[#070709] text-zinc-150 flex flex-col overflow-hidden font-sans relative">
+      {/* Confetti Drops victory */}
+      {winner && <ConfettiBurst />}
 
       {/* Toast Alert */}
       <AnimatePresence>
@@ -605,7 +657,7 @@ function Room() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="absolute top-4 left-1/2 -translate-x-1/2 z-55 flex items-center gap-2 px-4 py-2.5 bg-zinc-900 border border-zinc-800 text-amber-400 text-xs font-semibold rounded-xl shadow-2xl"
+            className="absolute top-4 left-1/2 -translate-x-1/2 z-55 flex items-center gap-2 px-4 py-2.5 bg-zinc-900 border border-white/[0.04] text-amber-450 text-xs font-semibold rounded-xl shadow-2xl backdrop-blur-xl"
           >
             <Info className="w-4 h-4 shrink-0" />
             <span>{toastMessage}</span>
@@ -613,539 +665,771 @@ function Room() {
         )}
       </AnimatePresence>
 
-      {/* Top Header Status Bar */}
-      <header className="border-b border-zinc-850 bg-zinc-950 px-6 py-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="flex items-center justify-center p-2 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-zinc-800/60 active:scale-95 transition-all"
-            title="Leave Arena Room"
-          >
-            <ArrowLeft className="w-4.5 h-4.5" />
-          </button>
-
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold bg-gradient-to-r from-amber-400 via-rose-450 to-indigo-400 bg-clip-text text-transparent">
-                AlgoSync Space
-              </span>
-              <span className={`w-1.5 h-1.5 rounded-full ${battleStarted ? "bg-rose-500 animate-ping" : "bg-emerald-500 animate-pulse"}`} />
-            </div>
-            <button
-              onClick={copyRoomIdToClipboard}
-              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 font-mono mt-0.5 group"
-            >
-              <span>Room ID: {roomId}</span>
-              {copiedRoomId ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 transition-opacity" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Global Controls */}
-        <div className="flex items-center gap-4">
-          {isSpectator && (
-            <div className="px-3.5 py-1.5 rounded-xl border border-indigo-500/20 text-indigo-400 text-xs font-bold bg-indigo-500/5 flex items-center gap-2">
-              <Eye className="w-4 h-4" />
-              <span>Spectator Mode</span>
-            </div>
-          )}
-
-          {roomInfo?.roomType === "battle" && !battleStarted && !isSpectator && (
-            <button
-              onClick={handleStartBattle}
-              disabled={!problem}
-              className="relative px-5 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg shadow-rose-600/15 active:scale-97 transition-all flex items-center gap-2 group cursor-pointer"
-            >
-              <Swords className="w-4 h-4 group-hover:rotate-12 transition-transform" />
-              <span>Start Battle</span>
-            </button>
-          )}
-
-          {roomInfo?.roomType === "battle" && battleStarted && !isSpectator && (
-            <div className="px-3.5 py-1.5 rounded-xl border border-rose-500/20 text-rose-455 text-xs font-bold bg-rose-500/5 flex items-center gap-2">
-              <Flame className="w-4 h-4 animate-pulse" />
-              <span>Duel In Progress</span>
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* Redesigned 3-Column layout */}
-      <div className="flex-1 flex overflow-hidden w-full">
-
-        {/* ======================================================== */}
-        {/* COLUMN 1: LEFT PANEL - PROBLEM STATEMENT (30% WIDTH)     */}
-        {/* ======================================================== */}
-        <div className="w-[30%] min-w-[280px] p-5 overflow-y-auto border-r border-zinc-850 bg-zinc-950/20 flex flex-col gap-6">
-          {problem ? (
-            <div className="space-y-6">
-
-              {/* Difficulty & Classification */}
-              <div className="flex items-center justify-between">
-                <span className={`text-[10px] uppercase px-2.5 py-0.5 rounded-full font-bold border font-mono ${getDifficultyColor(problem.difficulty)}`}>
-                  {problem.difficulty || "Medium"}
-                </span>
-                <span className="text-[10px] text-zinc-550 font-bold font-mono uppercase bg-zinc-900 border border-zinc-850 px-2 py-0.5 rounded">
-                  Interview
-                </span>
+      {/* RENDER BATTLE ARENA OR COLLAB IDE */}
+      {roomInfo?.roomType === "battle" ? (
+        
+        // ==========================================
+        // 1. esports battle arena layout
+        // ==========================================
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          
+          {/* Header VS layout */}
+          <header className="border-b border-white/[0.03] bg-zinc-950/60 backdrop-blur-xl px-6 py-3 flex items-center justify-between shrink-0 z-40 relative">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate("/dashboard")}
+                className="flex items-center justify-center p-2 rounded-xl text-zinc-550 hover:text-zinc-200 hover:bg-white/[0.02] border border-white/[0.04] active:scale-95 transition-all cursor-pointer shrink-0"
+                title="Leave Arena Room"
+              >
+                <ArrowLeft className="w-4.5 h-4.5" />
+              </button>
+              
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] text-zinc-650 font-mono tracking-widest uppercase leading-none font-bold">Match ID</span>
+                <span className="text-[11px] font-mono text-zinc-500 mt-1 leading-none">{roomId}</span>
               </div>
+            </div>
 
-              {/* Title & Description */}
-              <div>
-                <h1 className="text-xl font-extrabold tracking-tight text-zinc-150">{problem.title}</h1>
-
-                {/* Tags mapping */}
-                {problem.tags && problem.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2.5">
-                    {problem.tags.map((tag, idx) => (
-                      <span key={idx} className="text-[9px] font-bold text-indigo-400 bg-indigo-500/5 border border-indigo-500/10 px-2 py-0.5 rounded-md">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="mt-4 text-zinc-400 text-xs leading-relaxed whitespace-pre-line font-medium">
-                  {problem.statement}
+            {/* Middle player profiles HUD cards */}
+            <div className="flex items-center gap-6">
+              {/* Player 1 details */}
+              <div className="hidden sm:flex items-center gap-2.5 px-3 py-1 bg-white/[0.01] border border-white/[0.04] rounded-xl shadow-sm">
+                <div className="w-6.5 h-6.5 rounded-lg bg-indigo-500/10 border border-indigo-500/15 flex items-center justify-center text-[8.5px] font-bold text-indigo-400 uppercase font-mono">
+                  {p1.name.substring(0, 2)}
+                </div>
+                <div className="flex flex-col text-left leading-none">
+                  <span className="text-xs font-bold text-zinc-350">{p1.name}</span>
+                  <span className="text-[8px] text-zinc-600 font-mono mt-1 font-bold uppercase tracking-widest">{p1.rating} Elo</span>
                 </div>
               </div>
 
-              {/* Constraints */}
-              {problem.constraints && (
-                <div className="space-y-2 pt-4 border-t border-zinc-900">
-                  <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-                    <ChevronRight className="w-3.5 h-3.5 text-amber-500" />
-                    Constraints
-                  </h3>
-                  <pre className="text-zinc-450 text-xs pl-5 font-mono leading-relaxed bg-zinc-900/10 p-2 rounded-lg">
-                    {problem.constraints}
-                  </pre>
+              {/* Central VS emblem HUD timer */}
+              <div className="flex items-center gap-3.5">
+                <span className="text-[10px] text-zinc-650 font-mono font-bold tracking-widest uppercase">VS</span>
+                <CircularTimerHUD seconds={timer} isActive={battleStarted} max={300} />
+                <span className="text-[9px] text-zinc-550 font-bold bg-white/[0.01] border border-white/[0.04] px-2 py-0.5 rounded uppercase font-mono">
+                  Round #{roundNumber}
+                </span>
+              </div>
+
+              {/* Player 2 details */}
+              <div className="hidden sm:flex items-center gap-2.5 px-3 py-1 bg-white/[0.01] border border-white/[0.04] rounded-xl shadow-sm">
+                <div className="flex flex-col text-right leading-none">
+                  <span className="text-xs font-bold text-zinc-350">{p2.name}</span>
+                  <span className="text-[8px] text-zinc-600 font-mono mt-1 font-bold uppercase tracking-widest">{p2.rating} Elo</span>
+                </div>
+                <div className="w-6.5 h-6.5 rounded-lg bg-rose-500/10 border border-rose-500/15 flex items-center justify-center text-[8.5px] font-bold text-rose-455 uppercase font-mono">
+                  {p2.name.substring(0, 2)}
+                </div>
+              </div>
+            </div>
+
+            {/* Right launcher actions */}
+            <div className="flex items-center gap-3">
+              {!battleStarted && !isSpectator && (
+                <button
+                  onClick={handleStartBattle}
+                  disabled={!problem}
+                  className="px-4.5 py-2 bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-455 disabled:opacity-50 text-zinc-950 font-black text-xs rounded-xl active:scale-97 transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-amber-500/5 shrink-0"
+                >
+                  <Swords className="w-4 h-4" />
+                  Start Duel
+                </button>
+              )}
+              {battleStarted && (
+                <div className="px-3.5 py-1.5 rounded-xl border border-rose-500/20 text-rose-455 text-[10.5px] font-bold bg-rose-500/5 flex items-center gap-1.5 shrink-0">
+                  <Flame className="w-4 h-4 text-rose-500 animate-pulse" />
+                  Battle Dueling
                 </div>
               )}
+            </div>
+          </header>
 
-              {/* Examples */}
-              {problem.visibleExamples && problem.visibleExamples.length > 0 && (
-                <div className="space-y-4 pt-4 border-t border-zinc-900">
-                  <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-500">
-                    Examples
-                  </h3>
-                  {problem.visibleExamples.map((ex, idx) => (
-                    <div key={idx} className="space-y-2 bg-zinc-900/30 border border-zinc-850/60 p-3.5 rounded-xl text-xs">
-                      <div className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Example {idx + 1}</div>
-                      <div className="space-y-1 font-mono text-[11px] leading-relaxed">
-                        <div className="text-zinc-350"><span className="text-zinc-550 font-sans font-bold">Input:</span> {ex.input}</div>
-                        <div className="text-zinc-350"><span className="text-zinc-550 font-sans font-bold">Output:</span> {ex.output}</div>
-                        {ex.explanation && (
-                          <div className="text-zinc-400 font-sans mt-2 text-[11px] leading-relaxed">
-                            <span className="text-zinc-550 font-bold">Explanation:</span> {ex.explanation}
+          {/* Dueling Panels */}
+          <div className="flex-1 flex overflow-hidden w-full relative">
+            <button 
+              onClick={() => setCol1Collapsed(!col1Collapsed)}
+              className="absolute left-1.5 top-1/2 -translate-y-1/2 z-40 bg-zinc-950 border border-white/[0.04] p-1.5 rounded-lg text-zinc-650 hover:text-zinc-200 cursor-pointer hidden md:block"
+            >
+              <ChevronLeft className={`w-3.5 h-3.5 transition-transform ${col1Collapsed ? "rotate-180" : ""}`} />
+            </button>
+            <button 
+              onClick={() => setCol3Collapsed(!col3Collapsed)}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 z-40 bg-zinc-950 border border-white/[0.04] p-1.5 rounded-lg text-zinc-650 hover:text-zinc-200 cursor-pointer hidden md:block"
+            >
+              <ChevronLeft className={`w-3.5 h-3.5 transition-transform ${col3Collapsed ? "" : "rotate-180"}`} />
+            </button>
+
+            {/* Left Column Problem panel */}
+            <AnimatePresence initial={false}>
+              {!col1Collapsed && (
+                <motion.div 
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: "28%", opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  className="min-w-[280px] p-5 overflow-y-auto border-r border-white/[0.03] bg-zinc-950/20 flex flex-col gap-6 select-none shrink-0"
+                >
+                  {problem ? (
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[8px] uppercase px-2.5 py-0.5 rounded font-bold border font-mono ${getDifficultyColor(problem.difficulty)}`}>
+                          {problem.difficulty}
+                        </span>
+                        <span className="text-[8px] text-zinc-550 font-bold font-mono uppercase bg-white/[0.01] border border-white/[0.03] px-2 py-0.5 rounded">
+                          Lobby Duel
+                        </span>
+                      </div>
+
+                      <div className="space-y-3">
+                        <h2 className="text-base font-bold text-zinc-150 leading-snug">{problem.title}</h2>
+                        {problem.tags && problem.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {problem.tags.map((tag, idx) => (
+                              <span key={idx} className="text-[8px] font-bold text-indigo-400 bg-indigo-500/5 border border-indigo-500/10 px-1.5 py-0.5 rounded">
+                                {tag}
+                              </span>
+                            ))}
                           </div>
                         )}
+                        <div className="text-zinc-450 text-xs leading-relaxed whitespace-pre-line font-medium pr-1">
+                          {problem.statement}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-zinc-550">
-              <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mb-3" />
-              <p className="text-[11px] font-semibold">Preloading challenge...</p>
-            </div>
-          )}
-        </div>
 
-        {/* ======================================================== */}
-        {/* COLUMN 2: CENTER PANEL - EDITOR & CONSOLE (45% WIDTH)    */}
-        {/* ======================================================== */}
-        <div className="w-[45%] flex flex-col bg-[#0b0b0d] border-r border-zinc-850">
-
-          {/* Monaco Editor Container */}
-          <div className="flex-1 relative flex flex-col">
-            {/* Editor Control Headers */}
-            <div className="bg-zinc-950 px-4 py-2 border-b border-zinc-850 flex items-center justify-between shrink-0">
-              <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-455">
-                <Code className="w-4 h-4 text-indigo-400" />
-                workspace.{language === "cpp" ? "cpp" : language === "python" ? "py" : "java"}
-              </span>
-
-              {/* Language Selector Dropdown */}
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-zinc-550 font-bold uppercase">Language</span>
-                <select
-                  value={language}
-                  onChange={handleLanguageChange}
-                  className="bg-zinc-900 border border-zinc-800 text-zinc-350 text-[11px] font-bold font-mono px-2 py-0.5 rounded outline-none focus:border-zinc-700 cursor-pointer"
-                >
-                  <option value="cpp">C++ (GCC 17)</option>
-                  <option value="java">Java (OpenJDK 11)</option>
-                  <option value="python">Python (3.8)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Monaco Component */}
-            <div className="flex-1 relative">
-              <div className="absolute inset-0">
-                <Editor
-                  height="100%"
-                  defaultLanguage="cpp"
-                  language={language}
-                  theme="vs-dark"
-                  value={code}
-                  onChange={handleCodeChange}
-                  options={{
-                    readOnly: isSpectator,
-                    fontSize: 13,
-                    fontFamily: "JetBrains Mono, monospace",
-                    minimap: { enabled: false },
-                    scrollbar: {
-                      vertical: "visible",
-                      horizontal: "visible",
-                      verticalScrollbarSize: 8,
-                      horizontalScrollbarSize: 8,
-                    },
-                    lineNumbers: "on",
-                    lineDecorationsWidth: 10,
-                    folding: true,
-                    automaticLayout: true,
-                    smoothCaretAnimation: "on",
-                    cursorBlinking: "smooth",
-                    renderLineHighlight: "all",
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Console Area */}
-          <div className="h-64 bg-zinc-950 flex flex-col shrink-0">
-            {/* Console Control Tabs */}
-            <div className="bg-zinc-950 border-b border-zinc-850 px-4 flex items-center justify-between shrink-0">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setActiveConsoleTab("input")}
-                  className={`px-3 py-2 text-xs font-semibold border-b-2 outline-none transition-all cursor-pointer ${activeConsoleTab === "input" ? "border-amber-500 text-zinc-200" : "border-transparent text-zinc-500 hover:text-zinc-350"}`}
-                >
-                  Custom Input (stdin)
-                </button>
-                <button
-                  onClick={() => setActiveConsoleTab("output")}
-                  className={`px-3 py-2 text-xs font-semibold border-b-2 outline-none transition-all cursor-pointer ${activeConsoleTab === "output" ? "border-amber-500 text-zinc-200" : "border-transparent text-zinc-500 hover:text-zinc-350"}`}
-                >
-                  Output Console
-                </button>
-              </div>
-
-              {/* Execution Action buttons */}
-              {!isSpectator && (
-                <div className="flex gap-2 py-1.5">
-                  <button
-                    onClick={handleRunCode}
-                    disabled={isRunning || isSubmitting}
-                    className="px-3 py-1 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 text-xs font-bold rounded-lg transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                  >
-                    {isRunning ? (
-                      <div className="w-3 h-3 border border-zinc-300 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <Play className="w-3.5 h-3.5 text-zinc-400 fill-zinc-400" />
-                        Run Code
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={handleSubmitCode}
-                    disabled={isRunning || isSubmitting || !problem}
-                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-md shadow-indigo-600/10 transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                  >
-                    {isSubmitting ? (
-                      <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Submit Code
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {isSpectator && (
-                <span className="text-[10px] text-zinc-550 font-bold uppercase py-2">
-                  Read Only Console
-                </span>
-              )}
-            </div>
-
-            {/* Console Content Box */}
-            <div className="flex-1 p-4 overflow-y-auto font-mono text-xs">
-              {activeConsoleTab === "input" ? (
-                <textarea
-                  className="w-full h-full bg-zinc-950 text-zinc-300 placeholder-zinc-750 focus:outline-none resize-none"
-                  placeholder={isSpectator ? "Spectators cannot input data stream..." : "Enter inputs to pass to stdin stream..."}
-                  value={stdin}
-                  readOnly={isSpectator}
-                  onChange={(e) => setStdin(e.target.value)}
-                />
-              ) : (
-                <div className="h-full">
-                  {output ? (
-                    <div className={`p-3 rounded-xl border ${output === "Accepted" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : output.startsWith("Wrong") || output.startsWith("Compilation") || output.startsWith("Error") ? "bg-rose-500/10 border-rose-500/20 text-rose-450" : "bg-zinc-900 border-zinc-800 text-zinc-350"}`}>
-                      {output === "Accepted" ? (
-                        <div className="flex items-center gap-2 mb-1 font-bold">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <span>Verdict: ACCEPTED</span>
+                      {problem.constraints && (
+                        <div className="space-y-2 pt-4.5 border-t border-white/[0.03]">
+                          <h4 className="text-[9px] font-bold uppercase tracking-wider text-zinc-655 flex items-center gap-1.5">
+                            <ChevronRight className="w-3.5 h-3.5 text-amber-500" />
+                            Constraints
+                          </h4>
+                          <pre className="text-zinc-500 text-[10.5px] pl-4 font-mono leading-relaxed bg-white/[0.01] p-2 rounded-lg border border-white/[0.02] overflow-x-auto">
+                            {problem.constraints}
+                          </pre>
                         </div>
-                      ) : output.startsWith("Wrong") || output.startsWith("Compilation") || output.startsWith("Error") ? (
-                        <div className="flex items-center gap-2 mb-1 font-bold">
-                          <XCircle className="w-4 h-4 text-rose-400" />
-                          <span>Verdict: {output.toUpperCase()}</span>
+                      )}
+
+                      {problem.visibleExamples && problem.visibleExamples.length > 0 && (
+                        <div className="space-y-4 pt-4.5 border-t border-white/[0.03]">
+                          <h4 className="text-[9px] font-bold uppercase tracking-wider text-zinc-650">Visible Examples</h4>
+                          {problem.visibleExamples.map((ex, idx) => (
+                            <div key={idx} className="space-y-2.5 bg-white/[0.01] border border-white/[0.03] p-3.5 rounded-xl text-xs">
+                              <span className="text-[8.5px] font-bold text-amber-500 uppercase tracking-widest">Example {idx + 1}</span>
+                              <div className="space-y-1.5 font-mono text-[10.5px] leading-relaxed">
+                                <div className="text-zinc-350"><span className="text-zinc-650 font-sans font-bold">Input:</span> {ex.input}</div>
+                                <div className="text-zinc-350"><span className="text-zinc-650 font-sans font-bold">Output:</span> {ex.output}</div>
+                                {ex.explanation && (
+                                  <div className="text-zinc-500 font-sans mt-2 text-[10.5px] leading-relaxed">
+                                    <span className="text-zinc-650 font-bold">Explanation:</span> {ex.explanation}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ) : null}
-                      <pre className="whitespace-pre-wrap break-all leading-relaxed font-mono">{output}</pre>
+                      )}
                     </div>
                   ) : (
-                    <div className="text-zinc-650 flex flex-col items-center justify-center h-full gap-1">
-                      <Terminal className="w-4 h-4 text-zinc-800" />
-                      <p className="text-[10px]">Console results will display here.</p>
+                    <div className="h-full flex flex-col items-center justify-center text-zinc-700">
+                      <ShieldAlert className="w-8 h-8 text-zinc-800 mb-2" />
+                      <p className="text-[10px] font-semibold">Preloading arena challenge details...</p>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Monaco Workspace center */}
+            <div className="flex-1 flex flex-col bg-[#08080a] border-r border-white/[0.03] overflow-hidden min-w-0">
+              
+              <div className="flex-1 relative flex flex-col overflow-hidden">
+                <div className="bg-zinc-950 px-4 py-2.5 border-b border-white/[0.03] flex items-center justify-between shrink-0">
+                  <span className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-500">
+                    <Code className="w-4 h-4 text-indigo-400" />
+                    solution.{language === "cpp" ? "cpp" : language === "python" ? "py" : "java"}
+                  </span>
+                  
+                  <select
+                    value={language}
+                    onChange={handleLanguageChange}
+                    className="bg-[#08080a] border border-white/[0.04] text-zinc-450 text-[11.5px] font-bold font-mono px-2 py-1 rounded-lg outline-none cursor-pointer"
+                  >
+                    <option value="cpp">C++</option>
+                    <option value="java">Java</option>
+                    <option value="python">Python</option>
+                  </select>
+                </div>
+
+                <div className="flex-1 relative">
+                  <div className="absolute inset-0">
+                    <Editor
+                      height="100%"
+                      defaultLanguage="cpp"
+                      language={language}
+                      theme="vs-dark"
+                      value={code}
+                      onChange={handleCodeChange}
+                      options={{
+                        readOnly: isSpectator,
+                        fontSize: 13,
+                        fontFamily: "JetBrains Mono, monospace",
+                        minimap: { enabled: false },
+                        scrollbar: {
+                          vertical: "visible",
+                          horizontal: "visible",
+                          verticalScrollbarSize: 6,
+                          horizontalScrollbarSize: 6,
+                        },
+                        lineNumbers: "on",
+                        folding: true,
+                        automaticLayout: true,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Console logs output */}
+              <div className="h-60 bg-zinc-950 flex flex-col shrink-0 border-t border-white/[0.03]">
+                <div className="bg-zinc-950 border-b border-white/[0.03] px-4 flex items-center justify-between shrink-0">
+                  <div className="flex gap-1.5">
+                    {["input", "output"].map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveConsoleTab(tab)}
+                        className={`px-3 py-2.5 text-[11px] font-bold border-b-2 outline-none transition-all cursor-pointer ${activeConsoleTab === tab ? "border-amber-500 text-zinc-200" : "border-transparent text-zinc-650 hover:text-zinc-450"}`}
+                      >
+                        {tab === "input" ? "Custom Input (stdin)" : "Verdict Logs"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {!isSpectator && (
+                    <div className="flex gap-2 py-1.5">
+                      <button
+                        onClick={handleRunCode}
+                        disabled={isRunning || isSubmitting}
+                        className="px-3 py-1.5 bg-[#08080a] border border-white/[0.04] hover:bg-white/[0.03] text-zinc-300 text-[11.5px] font-bold rounded-lg transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isRunning ? (
+                          <div className="w-3.5 h-3.5 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <><Play className="w-3 h-3 fill-zinc-450 text-zinc-450" />Run</>
+                        )}
+                      </button>
+                      
+                      <button
+                        onClick={handleSubmitCode}
+                        disabled={isRunning || isSubmitting || !problem}
+                        className="px-3.5 py-1.5 bg-indigo-650 hover:bg-indigo-600 text-white text-[11.5px] font-bold rounded-lg shadow-md active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isSubmitting ? (
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <><CheckCircle2 className="w-3.5 h-3.5" />Submit</>
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
-              )}
-            </div>
 
-          </div>
-
-        </div>
-
-        {/* ======================================================== */}
-        {/* COLUMN 3: RIGHT PANEL - METADATA, CHAT & STATS (25% W)   */}
-        {/* ======================================================== */}
-        <div className="w-[25%] min-w-[250px] p-4.5 overflow-y-auto bg-zinc-950/40 flex flex-col gap-4">
-
-          {/* Battle Timer Display */}
-          {roomInfo?.roomType === "battle" && (
-            <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl shadow-xl flex flex-col items-center text-center">
-              <span className="text-[10px] text-zinc-550 font-extrabold uppercase tracking-wider">Timer</span>
-              {battleStarted ? (
-                <div className="flex flex-col items-center mt-2">
-                  <div className={`flex items-center justify-center gap-2 px-4 py-1.5 rounded-lg border text-lg font-bold font-mono ${timer < 60 ? "bg-rose-500/10 border-rose-500/30 text-rose-400 pulse-glow" : timer < 180 ? "bg-amber-500/10 border-amber-500/30 text-amber-400" : "bg-zinc-900 border-zinc-800 text-emerald-400"}`}>
-                    <Timer className={`w-4 h-4 ${timer < 60 ? "animate-spin" : ""}`} />
-                    {formatTimer(timer)}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center mt-2">
-                  <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-semibold text-zinc-400">
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    Not Active
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Mode & Status */}
-          <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl shadow-xl space-y-2.5 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-zinc-555 font-bold uppercase">Room Type</span>
-              <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded border ${roomInfo?.roomType === "collab" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-rose-400 bg-rose-500/10 border-rose-500/20"}`}>
-                {roomInfo?.roomType === "collab" ? "Collab Study" : "PvP Arena"}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between border-t border-zinc-900/60 pt-2">
-              <span className="text-[10px] text-zinc-550">Status</span>
-              {roomInfo?.roomType === "collab" ? (
-                <span className="text-[9px] text-zinc-400 font-bold uppercase bg-zinc-900 px-2 py-0.5 rounded border border-zinc-850">
-                  Sync Enabled
-                </span>
-              ) : battleStarted ? (
-                <span className="text-[9px] text-rose-455 font-bold uppercase bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
-                  Battle
-                </span>
-              ) : (
-                <span className="text-[9px] text-zinc-400 font-bold uppercase bg-zinc-900 px-2 py-0.5 rounded border border-zinc-850">
-                  Lobby
-                </span>
-              )}
-            </div>
-
-            {roomInfo?.roomType === "battle" && (
-              <div className="flex items-center justify-between border-t border-zinc-900/60 pt-2">
-                <span className="text-[10px] text-zinc-555 font-bold uppercase">Round Number</span>
-                <span className="font-bold font-mono text-zinc-350">
-                  Round #{battleStarted ? roundNumber : "—"}
-                </span>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between border-t border-zinc-900/60 pt-2">
-              <span className="text-[10px] text-zinc-555 font-bold uppercase">Spectators Count</span>
-              <span className="font-bold font-mono text-zinc-350 flex items-center gap-1">
-                <Eye className="w-3.5 h-3.5 text-zinc-500" />
-                {spectatorCount}
-              </span>
-            </div>
-          </div>
-
-          {/* Winner Card & Rating Changes */}
-          <AnimatePresence>
-            {roomInfo?.roomType === "battle" && winner && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-gradient-to-br from-amber-500/15 via-rose-500/10 to-zinc-950 border border-amber-500/20 p-4 rounded-xl shadow-2xl relative overflow-hidden"
-              >
-                <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/5 blur-lg pointer-events-none" />
-
-                <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-amber-500 uppercase tracking-wider mb-2">
-                  <Award className="w-4 h-4 text-amber-500" />
-                  Winner Declared
-                </div>
-
-                <h4 className="text-sm font-extrabold text-zinc-200 truncate flex items-center gap-1">
-                  {winner.name}
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
-                </h4>
-
-                {/* Rating updates list */}
-                {ratingChanges.length > 0 && (
-                  <div className="mt-3.5 pt-3 border-t border-zinc-900 space-y-1.5">
-                    <span className="text-[9px] text-zinc-550 font-bold uppercase block tracking-wider">
-                      Elo Rating Changes
-                    </span>
-                    {ratingChanges.map((change, idx) => {
-                      const pl = players.find(p => p._id === change.userId) || spectators.find(s => s.userId === change.userId);
-                      const isPositive = change.change > 0;
-                      return (
-                        <div key={idx} className="flex items-center justify-between text-[11px] font-semibold">
-                          <span className="text-zinc-400 truncate w-[100px]">
-                            {pl?.name || "Player"}
-                          </span>
-                          <span className={isPositive ? "text-emerald-400" : "text-rose-400"}>
-                            {isPositive ? `+${change.change}` : change.change} Elo
-                          </span>
+                <div className="flex-1 p-4.5 overflow-y-auto font-mono text-[12px] bg-[#070709]">
+                  {activeConsoleTab === "input" ? (
+                    <textarea
+                      className="w-full h-full bg-transparent text-zinc-300 placeholder-zinc-800 focus:outline-none resize-none font-mono"
+                      placeholder={isSpectator ? "Spectator console is muted..." : "Provide custom inputs to pass to stdin stream..."}
+                      value={stdin}
+                      readOnly={isSpectator}
+                      onChange={(e) => setStdin(e.target.value)}
+                    />
+                  ) : (
+                    <div className="h-full">
+                      {output ? (
+                        <div className={`p-3.5 rounded-xl border leading-relaxed ${output === "Accepted" ? "bg-emerald-500/10 border-emerald-500/15 text-emerald-400 animate-verdict-bounce" : "bg-white/[0.01] border-white/[0.04] text-zinc-300 animate-verdict-shake"}`}>
+                          {output === "Accepted" ? (
+                            <div className="flex items-center gap-1.5 mb-1.5 font-bold text-emerald-450 text-xs">
+                              <CheckCircle2 className="w-4.5 h-4.5" />
+                              <span>Accepted Verdict</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 mb-1.5 font-bold text-rose-455 text-xs">
+                              <Terminal className="w-4.5 h-4.5" />
+                              <span>Verdict Log Output</span>
+                            </div>
+                          )}
+                          <pre className="whitespace-pre-wrap break-all leading-relaxed text-[11.5px] font-mono">{output}</pre>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      ) : (
+                        <div className="text-zinc-755 flex flex-col items-center justify-center h-full gap-1">
+                          <Terminal className="w-4.5 h-4.5 text-zinc-800" />
+                          <p className="text-[10px]">Compilation outcomes logs will display here.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
 
-                {/* Next round automatic countdown (winner triggers) */}
-                {currentUser && winner._id === currentUser._id && nextRoundCountdown > 0 && (
-                  <div className="mt-4 pt-2.5 border-t border-amber-500/10 flex items-center justify-between text-[9px] text-amber-450 font-bold">
-                    <span>Next round starting...</span>
-                    <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 animate-pulse">
-                      {nextRoundCountdown}s
+            {/* Right: Competitor Status & Event Telemetry feed */}
+            <AnimatePresence initial={false}>
+              {!col3Collapsed && (
+                <motion.div 
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: "24%", opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  className="min-w-[240px] p-4 overflow-y-auto bg-zinc-950/40 flex flex-col gap-4 shrink-0 font-sans"
+                >
+                  {/* Players live indicators */}
+                  <div className="bg-[#08080a] border border-white/[0.04] p-4 rounded-xl flex flex-col max-h-[220px]">
+                    <span className="text-[9px] text-zinc-650 font-bold uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-indigo-400" />
+                      Live Matchups ({players.length})
                     </span>
+                    <div className="space-y-2 overflow-y-auto pr-0.5">
+                      {players.map((pl) => {
+                        const status = playerLiveStatuses[pl._id] || "Coding...";
+                        const isWon = winner && winner._id === pl._id;
+                        return (
+                          <div key={pl._id} className="p-2 bg-white/[0.01] border border-white/[0.03] rounded-lg flex items-center justify-between text-[11px]">
+                            <div className="flex flex-col min-w-0 text-left">
+                              <span className={`font-bold truncate w-[90px] ${isWon ? "text-amber-400" : "text-zinc-300"}`}>{pl.name}</span>
+                              {battleStarted && (
+                                <span className="text-[8.5px] text-zinc-550 font-mono mt-0.5">{status}</span>
+                              )}
+                            </div>
+                            <span className="font-mono text-[9px] font-bold text-zinc-500 bg-black/45 px-1.5 py-0.5 rounded border border-white/[0.03]">
+                              ★ {pl.rating ?? 1200}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                )}
+
+                  {/* Spectators listing */}
+                  {(isSpectator || spectators.length > 0) && (
+                    <div className="bg-[#08080a] border border-white/[0.04] p-4 rounded-xl flex flex-col max-h-[140px]">
+                      <span className="text-[9px] text-zinc-655 font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-zinc-650" />
+                        Audience ({spectators.length})
+                      </span>
+                      <div className="space-y-1.5 overflow-y-auto pr-0.5 text-[10px] text-zinc-500 text-left">
+                        {spectators.map((s, idx) => (
+                          <div key={idx} className="truncate">
+                            • {s.name} <span className="text-zinc-650 font-mono">({s.rating})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Shared arena chat */}
+                  <div className="bg-[#08080a] border border-white/[0.04] p-4.5 rounded-xl flex-1 flex flex-col min-h-[220px] overflow-hidden">
+                    <span className="text-[9px] text-zinc-650 font-bold uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                      <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
+                      Arena Chat
+                    </span>
+
+                    <div className="flex-1 overflow-y-auto space-y-2.5 pr-0.5 mb-2.5 min-h-[100px]">
+                      {chatMessages.map((msg, idx) => (
+                        <div key={idx} className="text-xs text-left">
+                          <div className="flex items-center gap-1">
+                            <span className="font-bold text-zinc-400">{msg.username}</span>
+                            <span className="text-[8.5px] text-zinc-655 font-mono">{msg.timestamp}</span>
+                          </div>
+                          <p className="text-zinc-500 leading-relaxed font-semibold mt-0.5">{msg.text}</p>
+                        </div>
+                      ))}
+                      <div ref={messagesEndRef} />
+                    </div>
+
+                    <form onSubmit={handleSendMessage} className="flex gap-1.5 shrink-0 border-t border-white/[0.03] pt-2">
+                      <input
+                        type="text"
+                        placeholder={isSpectator ? "Audience muted" : "Send logs..."}
+                        disabled={isSpectator}
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        className="flex-1 px-3 py-1.5 bg-transparent border border-white/[0.04] focus:border-indigo-500/40 rounded-xl text-xs outline-none placeholder-zinc-750 text-zinc-350"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isSpectator || !chatInput.trim()}
+                        className="p-1.8 bg-indigo-650 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-xl active:scale-95 transition-all flex items-center justify-center shrink-0 cursor-pointer"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                      </button>
+                    </form>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+          </div>
+
+          {/* Full Screen Victory / Loss overlay screen */}
+          <AnimatePresence>
+            {winner && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-zinc-950/95 backdrop-blur-xl flex flex-col items-center justify-center gap-6 z-50 p-6"
+              >
+                <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-amber-500/[0.02] blur-[150px] pointer-events-none" />
+                
+                <motion.div
+                  initial={{ scale: 0.9, y: 15 }}
+                  animate={{ scale: 1, y: 0 }}
+                  transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                  className="max-w-md w-full bg-[#08080a] border border-white/[0.04] p-8 rounded-3xl shadow-2xl relative overflow-hidden text-center space-y-6"
+                >
+                  <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500" />
+                  
+                  <div className="flex flex-col items-center gap-2">
+                    <Award className="w-12 h-12 text-amber-500 animate-bounce" />
+                    <span className="text-[10px] text-amber-500 font-black uppercase tracking-widest">Match Settled</span>
+                    <h2 className="text-xl font-black text-zinc-150 mt-1.5 flex items-center justify-center gap-1.5">
+                      {winner.name} Wins Duel
+                      <Sparkles className="w-4 h-4 text-amber-400 fill-amber-400" />
+                    </h2>
+                  </div>
+
+                  {ratingChanges.length > 0 && (
+                    <div className="border-y border-white/[0.03] py-4.5 space-y-2 text-xs font-semibold text-zinc-400 text-left">
+                      <span className="text-[8.5px] text-zinc-650 font-bold uppercase tracking-wider block mb-2">Elo adjustment breakdown</span>
+                      {ratingChanges.map((change, idx) => {
+                        const pl = players.find(p => p._id === change.userId) || spectators.find(s => s.userId === change.userId);
+                        const isPos = change.change > 0;
+                        return (
+                          <div key={idx} className="flex items-center justify-between">
+                            <span className="truncate w-[130px] font-bold">{pl?.name || "Competitor"}</span>
+                            <span className={isPos ? "text-emerald-450" : "text-rose-455"}>
+                              {isPos ? `+${change.change}` : change.change} Elo rating
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {currentUser && winner._id === currentUser._id && nextRoundCountdown > 0 && (
+                    <div className="flex items-center justify-between text-[10px] text-amber-500 font-bold pt-2">
+                      <span>Incrementing next round...</span>
+                      <span className="font-mono text-xs px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                        {nextRoundCountdown}s
+                      </span>
+                    </div>
+                  )}
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Players List with live coding statuses */}
-          <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl shadow-xl flex flex-col max-h-[220px]">
-            <span className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-wider mb-2.5 flex items-center gap-1.5 shrink-0">
-              <Users className="w-3.5 h-3.5 text-indigo-400" />
-              Players ({players.length})
-            </span>
+        </div>
 
-            <div className="space-y-2 overflow-y-auto pr-0.5">
-              {players.map((player) => {
-                const liveStatus = playerLiveStatuses[player._id] || "Coding...";
-                const isWinnerColor = winner && winner._id === player._id;
+      ) : (
+        
+        // ==========================================
+        // 2. Cursor-inspired Pair Programming sync layout
+        // ==========================================
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+          
+          <div className="absolute top-0 right-1/4 w-[450px] h-[300px] bg-indigo-500/[0.015] blur-[120px] pointer-events-none z-10" />
 
-                return (
-                  <div
-                    key={player._id}
-                    className="p-2 bg-zinc-900/60 border border-zinc-850 rounded-lg flex items-center justify-between text-[11px]"
-                  >
-                    <div className="flex flex-col min-w-0">
-                      <span className={`font-bold truncate w-[90px] ${isWinnerColor ? "text-amber-400" : "text-zinc-300"}`}>
-                        {player.name}
-                      </span>
-                      {battleStarted && (
-                        <span className="text-[9px] text-zinc-550 truncate w-[90px] mt-0.5 font-medium">
-                          {liveStatus}
-                        </span>
-                      )}
-                    </div>
-                    <span className="font-mono text-[9px] font-bold text-zinc-450 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-900 shrink-0">
-                      ★ {player.rating ?? 1200}
-                    </span>
-                  </div>
-                );
-              })}
+          {/* Minimal workspace header */}
+          <header className="border-b border-white/[0.03] bg-zinc-950/70 backdrop-blur-xl px-5 py-3.5 flex items-center justify-between shrink-0 z-40 relative">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate("/dashboard")}
+                className="flex items-center justify-center p-2 rounded-xl text-zinc-550 hover:text-zinc-200 hover:bg-white/[0.02] border border-white/[0.04] active:scale-95 transition-all cursor-pointer shrink-0"
+                title="Return to Dashboard"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+
+              <div className="flex flex-col text-left">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-zinc-200 leading-none">Collaborative Studio</span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/5 border border-emerald-500/15 text-[8.5px] text-emerald-455 font-bold uppercase tracking-wider animate-pulse font-mono">
+                    Live Sync
+                  </span>
+                </div>
+                <button
+                  onClick={copyRoomIdToClipboard}
+                  className="text-[9.5px] text-zinc-600 hover:text-zinc-350 font-mono mt-1 flex items-center gap-1 leading-none group cursor-pointer"
+                >
+                  <span>Room ID: {roomId}</span>
+                  {copiedRoomId ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3 h-3 opacity-60 group-hover:opacity-100" />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Spectators list */}
-          {isSpectator || spectators.length > 0 ? (
-            <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl shadow-xl flex flex-col max-h-[140px]">
-              <span className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-wider mb-2 flex items-center gap-1.5 shrink-0">
-                <Eye className="w-3.5 h-3.5 text-zinc-550" />
-                Spectating ({spectators.length})
-              </span>
-              <div className="space-y-1.5 overflow-y-auto pr-0.5 text-[10px] font-semibold text-zinc-450">
-                {spectators.map((s, idx) => (
-                  <div key={idx} className="truncate text-zinc-450">
-                    • {s.name} <span className="text-zinc-600 font-mono">({s.rating})</span>
+            {/* Active presence bubble list */}
+            <div className="flex items-center gap-2.5">
+              <div className="flex -space-x-1.5 overflow-hidden">
+                {players.map((pl) => (
+                  <div 
+                    key={pl._id} 
+                    className="w-6.5 h-6.5 rounded-full border border-zinc-950 bg-gradient-to-tr from-indigo-500 to-rose-500 flex items-center justify-center text-[7.5px] font-black text-white uppercase ring-2 ring-emerald-500/20"
+                    title={`${pl.name} (${pl.rating || 1200} Elo)`}
+                  >
+                    {pl.name.substring(0, 2)}
                   </div>
                 ))}
               </div>
+              <span className="text-[10px] text-zinc-550 font-semibold font-mono hidden sm:block">
+                {players.length} online
+              </span>
             </div>
-          ) : null}
+          </header>
 
-          {/* Room Chat system */}
-          <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl shadow-xl flex-1 flex flex-col min-h-[220px] overflow-hidden">
-            <span className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-wider mb-2.5 flex items-center gap-1.5 shrink-0">
-              <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
-              Room Chat
-            </span>
+          {/* Pair Programming split panels */}
+          <div className="flex-1 flex overflow-hidden w-full relative z-30">
+            
+            {/* Sidebar toggle buttons */}
+            <button 
+              onClick={() => setCol1Collapsed(!col1Collapsed)}
+              className="absolute left-1.5 top-1/2 -translate-y-1/2 z-40 bg-zinc-950 border border-white/[0.04] p-1.5 rounded-lg text-zinc-655 hover:text-zinc-200 cursor-pointer hidden md:block"
+            >
+              <ChevronLeft className={`w-3.5 h-3.5 transition-transform ${col1Collapsed ? "rotate-180" : ""}`} />
+            </button>
+            <button 
+              onClick={() => setCol3Collapsed(!col3Collapsed)}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 z-40 bg-zinc-950 border border-white/[0.04] p-1.5 rounded-lg text-zinc-655 hover:text-zinc-200 cursor-pointer hidden md:block"
+            >
+              <ChevronLeft className={`w-3.5 h-3.5 transition-transform ${col3Collapsed ? "" : "rotate-180"}`} />
+            </button>
 
-            {/* Message area */}
-            <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 mb-2.5 min-h-[100px]">
-              {chatMessages.map((msg, idx) => (
-                <div key={idx} className="text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-extrabold text-zinc-300">{msg.username}</span>
-                    <span className="text-[9px] text-zinc-600 font-mono">{msg.timestamp}</span>
-                  </div>
-                  <p className="text-zinc-450 leading-relaxed font-medium mt-0.5">{msg.text}</p>
+            {/* Panel 1: Problem statements */}
+            <AnimatePresence initial={false}>
+              {!col1Collapsed && (
+                <motion.div 
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: "26%", opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  className="min-w-[280px] p-5 overflow-y-auto border-r border-white/[0.03] bg-[#08080a]/30 flex flex-col gap-6 select-none shrink-0"
+                >
+                  {problem ? (
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[8px] uppercase px-2.5 py-0.5 rounded font-bold border font-mono ${getDifficultyColor(problem.difficulty)}`}>
+                          {problem.difficulty}
+                        </span>
+                        <span className="text-[8px] text-zinc-550 font-bold font-mono uppercase bg-white/[0.01] border border-white/[0.03] px-2 py-0.5 rounded">
+                          Lobby challenge
+                        </span>
+                      </div>
+
+                      <div className="space-y-2.5 text-left">
+                        <h3 className="text-sm font-bold text-zinc-150 leading-snug">{problem.title}</h3>
+                        <p className="text-zinc-450 text-[11.5px] leading-relaxed font-semibold">
+                          {problem.statement}
+                        </p>
+                      </div>
+
+                      {problem.constraints && (
+                        <div className="space-y-2 pt-4.5 border-t border-white/[0.03]">
+                          <span className="text-[8.5px] font-bold text-zinc-650 uppercase tracking-widest block text-left">Constraints</span>
+                          <pre className="text-zinc-500 text-[10px] font-mono leading-relaxed bg-white/[0.01] p-2.5 rounded-xl border border-white/[0.02] overflow-x-auto text-left">
+                            {problem.constraints}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-zinc-750">
+                      <UserCheck className="w-8 h-8 text-zinc-800 mb-2.5" />
+                      <p className="text-[10px]">Loading peer programming challenge...</p>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Panel 2: Monaco Editor space */}
+            <div className="flex-1 flex flex-col bg-[#0b0b0d] border-r border-white/[0.03] overflow-hidden min-w-0">
+              
+              {/* IDE toolbar panel */}
+              <div className="bg-zinc-950 px-4 py-2.5 border-b border-white/[0.03] flex items-center justify-between shrink-0">
+                <span className="text-[11px] font-bold text-zinc-500 flex items-center gap-1.5">
+                  <Code className="w-4 h-4 text-indigo-400" />
+                  sync-buffer.{language === "cpp" ? "cpp" : language === "python" ? "py" : "java"}
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={language}
+                    onChange={handleLanguageChange}
+                    className="bg-[#08080a] border border-white/[0.04] text-zinc-455 text-[11.5px] font-bold font-mono px-2 py-1 rounded-lg outline-none cursor-pointer"
+                  >
+                    <option value="cpp">C++</option>
+                    <option value="java">Java</option>
+                    <option value="python">Python</option>
+                  </select>
                 </div>
-              ))}
-              <div ref={messagesEndRef} />
+              </div>
+
+              {/* Editor viewport */}
+              <div className="flex-1 relative">
+                <div className="absolute inset-0">
+                  <Editor
+                    height="100%"
+                    defaultLanguage="cpp"
+                    language={language}
+                    theme="vs-dark"
+                    value={code}
+                    onChange={handleCodeChange}
+                    options={{
+                      readOnly: isSpectator,
+                      fontSize: 13,
+                      fontFamily: "JetBrains Mono, monospace",
+                      minimap: { enabled: false },
+                      scrollbar: {
+                        vertical: "visible",
+                        horizontal: "visible",
+                        verticalScrollbarSize: 6,
+                        horizontalScrollbarSize: 6,
+                      },
+                      lineNumbers: "on",
+                      folding: true,
+                      automaticLayout: true,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Console drawer */}
+              <div className="h-60 bg-zinc-950 flex flex-col shrink-0 border-t border-white/[0.03]">
+                <div className="bg-zinc-950 border-b border-white/[0.03] px-4 flex items-center justify-between shrink-0">
+                  <span className="text-[11px] font-bold py-3.5 border-b-2 border-amber-500 text-zinc-200 uppercase tracking-widest">
+                    Execution Output
+                  </span>
+
+                  {!isSpectator && (
+                    <button
+                      onClick={handleRunCode}
+                      disabled={isRunning}
+                      className="px-3.5 py-1.5 bg-[#08080a] border border-white/[0.04] hover:bg-white/[0.03] text-zinc-300 text-[11.5px] font-bold rounded-lg transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                    >
+                      {isRunning ? (
+                        <div className="w-3.5 h-3.5 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <><Play className="w-3 h-3 fill-zinc-450 text-zinc-450" />Run Solution</>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex-1 p-4.5 overflow-y-auto font-mono text-[12px] bg-[#070709]">
+                  {output ? (
+                    <div className="p-3.5 rounded-xl border border-white/[0.03] bg-white/[0.01]">
+                      <pre className="whitespace-pre-wrap break-all leading-relaxed text-[11.5px] font-mono text-zinc-355 text-left">{output}</pre>
+                    </div>
+                  ) : (
+                    <div className="text-zinc-750 flex flex-col items-center justify-center h-full gap-1">
+                      <Terminal className="w-4.5 h-4.5 text-zinc-800 animate-pulse" />
+                      <p className="text-[10px]">Verification compilations output will sync here.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
 
-            {/* Input form */}
-            <form onSubmit={handleSendMessage} className="flex gap-1.5 shrink-0 border-t border-zinc-900 pt-2">
-              <input
-                type="text"
-                placeholder={isSpectator ? "Spectators cannot chat" : "Send message..."}
-                disabled={isSpectator}
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                className="flex-1 px-3 py-1.5 bg-zinc-950 border border-zinc-850 focus:border-indigo-500/50 rounded-lg text-xs outline-none placeholder-zinc-700 text-zinc-350"
-              />
-              <button
-                type="submit"
-                disabled={isSpectator || !chatInput.trim()}
-                className="p-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg active:scale-95 transition-all flex items-center justify-center shrink-0 cursor-pointer"
-              >
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </form>
-          </div>
+            {/* Panel 3: Shared telemetry and Slack/Discord chat logs */}
+            <AnimatePresence initial={false}>
+              {!col3Collapsed && (
+                <motion.div 
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: "24%", opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  className="min-w-[240px] p-4 bg-zinc-950/45 flex flex-col gap-4 shrink-0 overflow-hidden h-full"
+                >
+                  {/* Contributors list */}
+                  <div className="bg-[#08080a] border border-white/[0.04] p-4 rounded-xl flex flex-col max-h-[160px] shrink-0">
+                    <span className="text-[9px] text-zinc-650 font-bold uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-indigo-400" />
+                      Workspace peers
+                    </span>
+                    <div className="space-y-1.5 overflow-y-auto pr-0.5 text-xs font-semibold text-zinc-350 text-left">
+                      {players.map((pl) => (
+                        <div key={pl._id} className="flex items-center gap-2 p-2 bg-white/[0.01] border border-white/[0.03] rounded-lg">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span className="truncate">{pl.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
+                  {/* Slack-like Chat panel */}
+                  <div className="bg-[#08080a] border border-white/[0.04] p-4.5 rounded-xl flex-1 flex flex-col overflow-hidden min-h-0">
+                    <span className="text-[9px] text-zinc-650 font-bold uppercase tracking-wider mb-2.5 flex items-center gap-1.5 shrink-0">
+                      <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
+                      Slack Stream
+                    </span>
+
+                    <div className="flex-1 overflow-y-auto space-y-3 pr-0.5 mb-2.5 min-h-[100px]">
+                      {chatMessages.map((msg, idx) => (
+                        <div key={idx} className="text-xs text-left">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-zinc-400">{msg.username}</span>
+                            <span className="text-[8.5px] text-zinc-650 font-mono">{msg.timestamp}</span>
+                          </div>
+                          <p className="text-zinc-555 leading-relaxed font-semibold mt-0.5">{msg.text}</p>
+                        </div>
+                      ))}
+                      <div ref={messagesEndRef} />
+                    </div>
+
+                    <form onSubmit={handleSendMessage} className="flex gap-1.5 shrink-0 border-t border-white/[0.03] pt-2">
+                      <input
+                        type="text"
+                        placeholder={isSpectator ? "Audience muted" : "Type log line..."}
+                        disabled={isSpectator}
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        className="flex-1 px-3 py-1.5 bg-transparent border border-white/[0.04] focus:border-indigo-500/40 rounded-xl text-xs outline-none placeholder-zinc-750 text-zinc-350"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isSpectator || !chatInput.trim()}
+                        className="p-1.8 bg-indigo-650 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-xl active:scale-95 transition-all flex items-center justify-center shrink-0 cursor-pointer"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                      </button>
+                    </form>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+          </div>
         </div>
 
-      </div>
-
+      )}
     </div>
+  );
+}
+
+function UserCheck(props) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <polyline points="16 11 18 13 22 9" />
+    </svg>
   );
 }
 
