@@ -15,6 +15,12 @@ const startBattle = async (req, res) => {
             });
         }
 
+        if (room.roomType !== "battle") {
+            return res.status(400).json({
+                message: "Cannot start battle in a collaborative room"
+            });
+        }
+
         const participants = room.users.map((user) => ({
             user
         }));
@@ -51,11 +57,17 @@ const submitBattle = async (req, res) => {
     try {
         const { battleId } = req.body;
 
-        const battle = await Battle.findById(battleId);
+        const battle = await Battle.findById(battleId).populate("room");
 
         if (!battle) {
             return res.status(404).json({
                 message: "Battle not found"
+            });
+        }
+
+        if (!battle.room || battle.room.roomType !== "battle") {
+            return res.status(400).json({
+                message: "Cannot submit battle for a collaborative room"
             });
         }
 
@@ -140,15 +152,29 @@ const submitBattle = async (req, res) => {
 // Get Battle by Room
 const getBattleByRoom = async (req, res) => {
     try {
+        const room = await Room.findOne({ roomId: req.params.roomId });
+        if (!room) {
+            return res.status(404).json({
+                message: "Room not found"
+            });
+        }
+
+        if (room.roomType !== "battle") {
+            return res.status(400).json({
+                message: "Room is not a battle arena"
+            });
+        }
+
         const battle = await Battle.findOne({
-            room: req.params.roomId
+            room: room._id,
+            status: "active"
         })
         .populate("problem")
         .populate("winner", "name");
 
         if (!battle) {
             return res.status(404).json({
-                message: "Battle not found"
+                message: "Active battle not found"
             });
         }
 

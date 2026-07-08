@@ -4,7 +4,7 @@ import Editor from "@monaco-editor/react";
 import socket from "../socket/socket";
 import { getProblems } from "../services/problemService";
 import { runCode, submitCode } from "../services/codeService";
-import { startBattle, submitBattle } from "../services/battleService";
+import { startBattle, submitBattle, getActiveBattle } from "../services/battleService";
 import { getRoomDetails } from "../services/roomService";
 import {
   Swords, Play, CheckCircle2, ArrowLeft, Copy, Check, Timer,
@@ -81,6 +81,25 @@ function Room() {
       const data = await getRoomDetails(roomId);
       setRoomInfo(data);
       setPlayers(data.users || []);
+
+      // If it is an active battle room, load the active battle details
+      if (data.roomType === "battle" && data.isBattleActive) {
+        try {
+          const battle = await getActiveBattle(roomId);
+          if (battle) {
+            setBattleId(battle._id);
+            setProblem(battle.problem);
+            setBattleStarted(true);
+
+            // Sync remaining time
+            const elapsed = Math.floor((Date.now() - new Date(battle.startTime).getTime()) / 1000);
+            const remaining = Math.max(0, 300 - elapsed);
+            setTimer(remaining);
+          }
+        } catch (battleErr) {
+          console.log("No active battle found or error loading battle:", battleErr);
+        }
+      }
     } catch (err) {
       console.log("Error fetching room details:", err);
     }
@@ -255,7 +274,7 @@ function Room() {
   // Winner 5-second automatic round transition trigger
   useEffect(() => {
     let interval;
-    if (winner && currentUser && winner._id === currentUser._id) {
+    if (roomInfo?.roomType === "battle" && winner && currentUser && winner._id === currentUser._id) {
       setNextRoundCountdown(5);
       interval = setInterval(() => {
         setNextRoundCountdown((prev) => {
@@ -269,7 +288,7 @@ function Room() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [winner, currentUser]);
+  }, [winner, currentUser, roomInfo]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -385,7 +404,7 @@ function Room() {
         status: result.verdict
       });
 
-      if (result.verdict === "Accepted" && battleStarted && battleId) {
+      if (result.verdict === "Accepted" && roomInfo?.roomType === "battle" && battleStarted && battleId) {
         // Register victory in the database
         const updatedBattle = await submitBattle(battleId);
 
@@ -442,6 +461,7 @@ function Room() {
   };
 
   const handleStartBattle = async () => {
+    if (roomInfo?.roomType !== "battle") return;
     const pool = filteredProblems.length > 0 ? filteredProblems : allProblems;
     if (pool.length === 0) {
       showToast("Coding problems pool is empty.");
@@ -485,6 +505,7 @@ function Room() {
   };
 
   const advanceToNextRound = async () => {
+    if (roomInfo?.roomType !== "battle") return;
     const pool = filteredProblems.length > 0 ? filteredProblems : allProblems;
     if (pool.length === 0) return;
 
@@ -629,18 +650,18 @@ function Room() {
             </div>
           )}
 
-          {!battleStarted && !isSpectator && (
+          {roomInfo?.roomType === "battle" && !battleStarted && !isSpectator && (
             <button
               onClick={handleStartBattle}
               disabled={!problem}
               className="relative px-5 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg shadow-rose-600/15 active:scale-97 transition-all flex items-center gap-2 group cursor-pointer"
             >
               <Swords className="w-4 h-4 group-hover:rotate-12 transition-transform" />
-              <span>Launch Battle Mode</span>
+              <span>Start Battle</span>
             </button>
           )}
 
-          {battleStarted && !isSpectator && (
+          {roomInfo?.roomType === "battle" && battleStarted && !isSpectator && (
             <div className="px-3.5 py-1.5 rounded-xl border border-rose-500/20 text-rose-455 text-xs font-bold bg-rose-500/5 flex items-center gap-2">
               <Flame className="w-4 h-4 animate-pulse" />
               <span>Duel In Progress</span>
@@ -904,30 +925,26 @@ function Room() {
         <div className="w-[25%] min-w-[250px] p-4.5 overflow-y-auto bg-zinc-950/40 flex flex-col gap-4">
 
           {/* Battle Timer Display */}
-          <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl shadow-xl flex flex-col items-center text-center">
-            <span className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-wider">Timer</span>
-            {roomInfo?.roomType === "collab" ? (
-              <div className="flex flex-col items-center mt-2">
-                <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-850 text-xs font-semibold text-zinc-400">
-                  Collab Active
+          {roomInfo?.roomType === "battle" && (
+            <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl shadow-xl flex flex-col items-center text-center">
+              <span className="text-[10px] text-zinc-550 font-extrabold uppercase tracking-wider">Timer</span>
+              {battleStarted ? (
+                <div className="flex flex-col items-center mt-2">
+                  <div className={`flex items-center justify-center gap-2 px-4 py-1.5 rounded-lg border text-lg font-bold font-mono ${timer < 60 ? "bg-rose-500/10 border-rose-500/30 text-rose-400 pulse-glow" : timer < 180 ? "bg-amber-500/10 border-amber-500/30 text-amber-400" : "bg-zinc-900 border-zinc-800 text-emerald-400"}`}>
+                    <Timer className={`w-4 h-4 ${timer < 60 ? "animate-spin" : ""}`} />
+                    {formatTimer(timer)}
+                  </div>
                 </div>
-              </div>
-            ) : battleStarted ? (
-              <div className="flex flex-col items-center mt-2">
-                <div className={`flex items-center justify-center gap-2 px-4 py-1.5 rounded-lg border text-lg font-bold font-mono ${timer < 60 ? "bg-rose-500/10 border-rose-500/30 text-rose-400 pulse-glow" : timer < 180 ? "bg-amber-500/10 border-amber-500/30 text-amber-400" : "bg-zinc-900 border-zinc-800 text-emerald-400"}`}>
-                  <Timer className={`w-4 h-4 ${timer < 60 ? "animate-spin" : ""}`} />
-                  {formatTimer(timer)}
+              ) : (
+                <div className="flex flex-col items-center mt-2">
+                  <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-semibold text-zinc-400">
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Not Active
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center mt-2">
-                <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-semibold text-zinc-400">
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Not Active
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* Mode & Status */}
           <div className="bg-zinc-950/80 border border-zinc-850 p-4 rounded-xl shadow-xl space-y-2.5 text-xs">

@@ -40,3 +40,19 @@ export const submitBattle = async (battleId) => {
 
     return response.data;
 };
+
+// Get active battle details
+export const getActiveBattle = async (roomId) => {
+    const token = getToken();
+
+    const response = await axios.get(
+        `${API_URL}/${roomId}`,
+        {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        }
+    );
+
+    return response.data;
+};

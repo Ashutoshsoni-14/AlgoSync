@@ -1,3 +1,4 @@
+const Room = require("../models/Room");
 const roomSpectators = {};
 
 const getSpectatorCount = (roomId) => {
@@ -14,13 +15,22 @@ const socketHandler = (io) => {
         console.log("User connected:", socket.id);
 
         // Join Room
-        socket.on("join-room", ({ roomId, isSpectator, user }) => {
+        socket.on("join-room", async ({ roomId, isSpectator, user }) => {
             socket.join(roomId);
             socket.roomId = roomId;
             socket.isSpectator = isSpectator;
             socket.user = user;
 
-            console.log(`${socket.id} joined room ${roomId} (Spectator: ${!!isSpectator})`);
+            try {
+                const room = await Room.findOne({ roomId });
+                if (room) {
+                    socket.roomType = room.roomType;
+                }
+            } catch (err) {
+                console.error("Socket database lookup failed:", err);
+            }
+
+            console.log(`${socket.id} joined room ${roomId} (Spectator: ${!!isSpectator}, Type: ${socket.roomType})`);
 
             if (isSpectator) {
                 if (!roomSpectators[roomId]) {
@@ -55,34 +65,42 @@ const socketHandler = (io) => {
 
         // Code Change
         socket.on("code-change", ({ roomId, code }) => {
-            socket.to(roomId).emit("sync-code", {
-                code
-            });
+            if (socket.roomType === "collab") {
+                socket.to(roomId).emit("sync-code", {
+                    code
+                });
+            }
         });
 
         // Battle Started
         socket.on("battle-start", ({ roomId, problem, battleId, timer }) => {
-            socket.to(roomId).emit("battle-start-sync", {
-                problem,
-                battleId,
-                timer
-            });
+            if (socket.roomType === "battle") {
+                socket.to(roomId).emit("battle-start-sync", {
+                    problem,
+                    battleId,
+                    timer
+                });
+            }
         });
 
         // Battle Ended / Winner Declared (with ELO rating changes)
         socket.on("battle-end", ({ roomId, winner, ratingChanges }) => {
-            io.to(roomId).emit("battle-end-sync", {
-                winner,
-                ratingChanges
-            });
+            if (socket.roomType === "battle") {
+                io.to(roomId).emit("battle-end-sync", {
+                    winner,
+                    ratingChanges
+                });
+            }
         });
 
         // Next Round Triggered
         socket.on("next-round", ({ roomId, problem, timer }) => {
-            socket.to(roomId).emit("next-round-sync", {
-                problem,
-                timer
-            });
+            if (socket.roomType === "battle") {
+                socket.to(roomId).emit("next-round-sync", {
+                    problem,
+                    timer
+                });
+            }
         });
 
         // Live Chat Message
