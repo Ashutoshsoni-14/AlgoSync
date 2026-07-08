@@ -47,3 +47,70 @@
 .glow-indigo:hover {
   box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
 }
+
+/* Confetti Burst Animations */
+@keyframes confettiFall {
+  0% {
+    transform: translateY(-10px) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+.confetti-piece {
+  position: fixed;
+  top: -20px;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  animation: confettiFall 3s linear forwards;
+  z-index: 999;
+}
+
+/* Custom text and card styling */
+.gradient-text {
+  background: linear-gradient(135deg, #f59e0b, #ec4899, #6366f1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.card-hover-scale {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease;
+}
+.card-hover-scale:hover {
+  transform: translateY(-2px);
+}
+
+.glow-border-amber:hover {
+  border-color: rgba(245, 158, 11, 0.35) !important;
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.05);
+}
+.glow-border-indigo:hover {
+  border-color: rgba(99, 102, 241, 0.35) !important;
+  box-shadow: 0 0 25px rgba(99, 102, 241, 0.05);
+}
+
+/* Code verification bounce & shake indicators */
+@keyframes verdictBounce {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+.animate-verdict-bounce {
+  animation: verdictBounce 0.4s ease-out;
+}
+
+@keyframes verdictShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+.animate-verdict-shake {
+  animation: verdictShake 0.3s ease-in-out;
+}
